@@ -1,0 +1,24 @@
+# --- API web ---
+Flask
+flask-cors
+flasgger
+gunicorn
+
+# --- Machine Learning ---
+xgboost
+scikit-learn
+joblib
+numpy
+pandas
+scipy
+
+# --- Visualizacion (entrenamiento) ---
+matplotlib
+seaborn
+
+# --- Recoleccion (Riot API) ---
+requests
+python-dotenv
+
+# --- Firestore (persistencia) ---
+firebase-admin

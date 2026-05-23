@@ -1,0 +1,30 @@
+# --- Secretos: NUNCA subir a Git ---
+# Clave de servicio de Firebase (Firestore)
+*serviceAccount*.json
+firebase-key.json
+firebase_key.json
+*-firebase-adminsdk-*.json
+
+# Variables de entorno
+.env
+.env.*
+
+# --- Entorno virtual de Python ---
+venv/
+env/
+.venv/
+
+# --- Cache de Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# --- Sistema operativo / editores ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# --- Artefactos pesados / temporales (opcional) ---
+*.log

@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(\\(Get-Content \"D:\\\\frontend\\\\src\\\\components\\\\DashboardComponents.jsx\" | Measure-Object -Line\\).Lines)",
+      "Bash(del \"D:\\\\Backend\\\\app\\\\services\\\\__pycache__\\\\predicciones_service.cpython-39.pyc\")",
+      "Bash(D:/Backend/venv/Scripts/python.exe -c ' *)",
+      "Bash(Get-ChildItem -Path \"D:\\\\Backend\\\\app\" -Recurse -Filter \"*.py\")",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(cd /d D:\\\\Backend)",
+      "Bash(python -c \"import py_compile; py_compile.compile\\('app/services/recomendaciones.py', doraise=True\\); py_compile.compile\\('app/services/collector_service.py', doraise=True\\); py_compile.compile\\('app/routes/dashboard_routes.py', doraise=True\\); print\\('OK — sin errores de sintaxis'\\)\")",
+      "Bash(netstat -ano)",
+      "Bash(findstr \":5000\")"
+    ]
+  }
+}
