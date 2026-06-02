@@ -14,11 +14,32 @@ from sklearn.linear_model import LogisticRegression
 # services -> app -> Backend (donde estan los .pkl)
 BASE = Path(__file__).resolve().parents[2]
 
-# Orden EXACTO de variables con el que se entreno el modelo XGBoost.
+# Orden EXACTO de variables con el que se entreno el modelo.
 FEATURES = ["THT", "ND", "TP", "HPD", "NPPD", "DCJ"]
 
-# Severidad de referencia de cada clase para derivar el score 0-100.
-SEVERIDAD = {"Bajo": 15, "Medio": 55, "Alto": 90}
+# Clasificacion binaria (ICOGS-A): 0 = "Sin riesgo", 1 = "Riesgo".
+# El score 0-100 es la probabilidad de la clase "Riesgo".
+CLASE_RIESGO = "Riesgo"
+
+# Niveles visuales derivados del score (capa de presentacion).
+# El modelo predice P(Riesgo); el score 0-100 se segmenta en 3 bandas
+# deducibles a partir del criterio del ICOGS-A: el corte de riesgo es el
+# percentil 75 (Alto), y el punto medio (Medio) corresponde a la mediana
+# del puntaje, lo que en el espacio del score equivale a 50.
+#   Bajo  : score < 50           (por debajo de la mediana de riesgo)
+#   Medio : 50 <= score < 75     (entre la mediana y el P75)
+#   Alto  : score >= 75          (en o por encima del P75)
+UMBRAL_ALTO = 75
+UMBRAL_MEDIO = 50
+
+
+def nivel_visual(score):
+    """Nivel de presentacion (Alto/Medio/Bajo) derivado del score 0-100."""
+    if score >= UMBRAL_ALTO:
+        return "Alto"
+    if score >= UMBRAL_MEDIO:
+        return "Medio"
+    return "Bajo"
 
 
 @lru_cache(maxsize=1)
@@ -50,21 +71,26 @@ def predecir(fila):
 
     pred_idx = int(model.predict(X_in)[0])
     proba = model.predict_proba(X_in)[0]
-    nivel = str(encoder.inverse_transform([pred_idx])[0])
+    clase = str(encoder.inverse_transform([pred_idx])[0])
 
     probabilidades = {
         str(cls): round(float(p), 4)
         for cls, p in zip(encoder.classes_, proba)
     }
 
-    score = round(sum(
-        probabilidades.get(cls, 0.0) * sev
-        for cls, sev in SEVERIDAD.items()
-    ))
+    # Score 0-100 = probabilidad de la clase "Riesgo".
+    score = round(probabilidades.get(CLASE_RIESGO, 0.0) * 100)
+
+    # Nivel visual (Alto/Medio/Bajo) derivado del score, y bandera
+    # binaria de riesgo (clase predicha por el modelo) para las alertas.
+    nivel = nivel_visual(score)
+    en_riesgo = clase == CLASE_RIESGO
 
     return {
         "nivel": nivel,
         "nivel_label": nivel.upper(),
+        "clase": clase,
+        "en_riesgo": en_riesgo,
         "score": score,
         "probabilidades": probabilidades,
     }

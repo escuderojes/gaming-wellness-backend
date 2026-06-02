@@ -12,9 +12,9 @@ paramétrico basado en literatura de gaming disorder (Lemmens et al.).
 
 # ─── Umbrales de nivel ────────────────────────────────────────────────
 def _nivel(score):
-    if score >= 70:
+    if score >= 75:
         return "Alto"
-    if score >= 40:
+    if score >= 50:
         return "Medio"
     return "Bajo"
 

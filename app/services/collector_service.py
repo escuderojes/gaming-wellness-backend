@@ -114,7 +114,7 @@ def _perfil_invocador(puuid, headers):
     }
 
 
-def _recolectar_real(name, tag, on_progress):
+def _recolectar_real(name, tag, on_progress, noche_inicio=NOCHE_INICIO, noche_fin=NOCHE_FIN):
     """Recoleccion real contra la Riot API para un usuario."""
     headers = {"X-Riot-Token": RIOT_API_KEY}
 
@@ -169,7 +169,7 @@ def _recolectar_real(name, tag, on_progress):
     return {
         "variables": _metricas(durations, dates),
         "perfil": perfil,
-        "extras": _extras(durations, dates),
+        "extras": _extras(durations, dates, noche_inicio, noche_fin),
     }
 
 
@@ -184,14 +184,25 @@ def _metricas(durations, dates):
     return {"THT": THT, "ND": ND, "TP": TP, "HPD": HPD, "NPPD": NPPD, "DCJ": DCJ}
 
 
-def _es_noche(hora):
-    """True si la hora (0-23) cae en la ventana nocturna."""
-    return hora >= NOCHE_INICIO or hora < NOCHE_FIN
+def _es_noche(hora, inicio=NOCHE_INICIO, fin=NOCHE_FIN):
+    """True si la hora (0-23) cae en la ventana nocturna [inicio, fin).
+
+    La ventana puede cruzar la medianoche (p. ej. 23→07). Los límites
+    provienen de la configuración del usuario (Ventana de sueño).
+    """
+    if inicio == fin:
+        return False
+    if inicio < fin:               # ventana sin cruce de medianoche
+        return inicio <= hora < fin
+    return hora >= inicio or hora < fin  # ventana con cruce de medianoche
 
 
-def _extras(durations, dates):
+def _extras(durations, dates, noche_inicio=NOCHE_INICIO, noche_fin=NOCHE_FIN):
     """Metricas adicionales para el dashboard (NO van al modelo):
     PJN (juego nocturno), distribucion por hora y por dia de semana.
+
+    noche_inicio/noche_fin: ventana de sueño configurada por el usuario
+    (horas 0-23). Define qué partidas cuentan como juego nocturno.
 
     Solo se consideran las partidas de la semana ISO en curso
     (lunes → hoy), de modo que el grafico horario y semanal siempre
@@ -223,7 +234,7 @@ def _extras(durations, dates):
         por_dia_total[wd] += dur
         dias_por_weekday[wd].add(fecha.date())
         por_hora[fecha.hour] += dur
-        if _es_noche(fecha.hour):
+        if _es_noche(fecha.hour, noche_inicio, noche_fin):
             noche_horas += dur
             noches.add(fecha.date())
         dias_activos.add(fecha.date())
@@ -259,42 +270,56 @@ def _extras(durations, dates):
     }
 
 
-def _extras_demo(perfil_juego, THT, ND):
-    """Simula las metricas extra de forma plausible segun el perfil."""
-    # Promedio de horas por dia de la semana (THT repartido y promediado
-    # sobre las ~ND/7 veces que aparece cada dia de la semana).
-    ocurrencias = max(ND / 7.0, 1.0)
-    pesos = [random.uniform(0.4, 1.6) for _ in range(7)]
-    s_pesos = sum(pesos) or 1
-    por_dia = [round(THT * w / s_pesos / ocurrencias, 2) for w in pesos]
+def _extras_demo(perfil_juego, THT, ND, noche_inicio=NOCHE_INICIO, noche_fin=NOCHE_FIN):
+    """Simula las metricas extra de forma plausible segun el perfil.
 
-    # Forma horaria base (madrugada baja, tarde-noche alta).
-    forma = [3, 2, 1, 1, 1, 1, 2, 4, 6, 8, 9, 10, 11, 11,
-             12, 13, 15, 17, 19, 21, 22, 20, 12, 6]
-    if perfil_juego == "alto":
-        for h in (22, 23, 0, 1, 2, 3):
-            forma[h] *= 3
-    elif perfil_juego == "medio":
-        for h in (22, 23, 0, 1):
-            forma[h] = int(forma[h] * 1.8)
-    s_forma = sum(forma) or 1
-    por_hora = [round(THT * f / s_forma, 2) for f in forma]
-
-    noche_horas = sum(por_hora[h] for h in range(24) if _es_noche(h))
+    porHora y porDiaSemana usan tts_semana como base comun para que
+    ambas graficas del dashboard sean coherentes entre si.
+    """
     # Rango de fechas: semana ISO en curso (lunes → hoy).
     hasta = datetime.now().date()
-    desde = hasta - timedelta(days=hasta.weekday())   # lunes de la semana actual
-    # Dias activos simulados dentro de la semana: no puede superar los dias
-    # transcurridos desde el lunes (hasta.weekday() + 1 = 1..7).
+    desde = hasta - timedelta(days=hasta.weekday())
     dias_transcurridos = hasta.weekday() + 1
     dias_activos_semana = random.randint(1, min(int(ND), dias_transcurridos))
-    # Métricas semanales simuladas (misma lógica que la recolección real).
-    hpd_semana = round(THT / max(ND, 1), 2)          # usar el HPD global como aproximación
+
+    # tts_semana = horas reales de la semana: BASE ÚNICA para ambas gráficas.
+    hpd_semana = round(THT / max(ND, 1), 2)
     tts_semana = round(hpd_semana * dias_activos_semana, 2)
     dcj_semana = min(dias_activos_semana, dias_transcurridos)
+
+    # porDiaSemana: distribuye tts_semana entre los 7 días.
+    pesos = [random.uniform(0.4, 1.6) for _ in range(7)]
+    s_pesos = sum(pesos) or 1
+    por_dia = [round(tts_semana * w / s_pesos, 2) for w in pesos]
+
+    # porHora: distribuye tts_semana con forma horaria realista que
+    # VARÍA por usuario. Se parte de una curva base (más juego por la
+    # tarde-noche) y se desplaza el "pico" de juego a una hora aleatoria
+    # propia de cada jugador, con jitter por franja, de modo que ningún
+    # histograma sea idéntico a otro.
+    base = [3, 2, 1, 1, 1, 1, 2, 4, 6, 8, 9, 10, 11, 11,
+            12, 13, 15, 17, 19, 21, 22, 20, 12, 6]
+    desplazamiento = random.randint(-4, 4)          # corre el pico de cada usuario
+    forma = [0.0] * 24
+    for h in range(24):
+        v = base[(h - desplazamiento) % 24]
+        v *= random.uniform(0.55, 1.45)             # jitter por franja
+        forma[h] = max(v, 0.0)
+    # Realce nocturno según el perfil (más madrugada = mayor riesgo).
+    if perfil_juego == "alto":
+        for h in (22, 23, 0, 1, 2, 3):
+            forma[h] *= random.uniform(2.2, 3.4)
+    elif perfil_juego == "medio":
+        for h in (22, 23, 0, 1):
+            forma[h] *= random.uniform(1.4, 2.1)
+    s_forma = sum(forma) or 1
+    por_hora = [round(tts_semana * f / s_forma, 2) for f in forma]
+
+    noche_horas = sum(por_hora[h] for h in range(24)
+                      if _es_noche(h, noche_inicio, noche_fin))
     return {
-        "pjnMin": round(noche_horas * 60 / max(ND, 1), 1),
-        "nochesActivas": random.randint(0, min(int(ND), 7)),
+        "pjnMin": round(noche_horas * 60 / max(dias_activos_semana, 1), 1),
+        "nochesActivas": random.randint(0, min(dias_activos_semana, 7)),
         "porDiaSemana": por_dia,
         "porHora": por_hora,
         "desde": desde.isoformat(),
@@ -306,7 +331,7 @@ def _extras_demo(perfil_juego, THT, ND):
     }
 
 
-def _recolectar_demo(name, tag, on_progress):
+def _recolectar_demo(name, tag, on_progress, noche_inicio=NOCHE_INICIO, noche_fin=NOCHE_FIN):
     """Simula la recoleccion (sin red) con metricas plausibles."""
     for pct, msg in PASOS:
         on_progress(pct, msg)
@@ -347,17 +372,31 @@ def _recolectar_demo(name, tag, on_progress):
     return {
         "variables": variables,
         "perfil": perfil,
-        "extras": _extras_demo(perfil_juego, THT, ND),
+        "extras": _extras_demo(perfil_juego, THT, ND, noche_inicio, noche_fin),
     }
 
 
-def recolectar_usuario(name, tag, on_progress, demo=False):
+def _hora_de(valor, defecto):
+    """Convierte 'HH:MM' (config Ventana de sueño) a hora entera 0-23."""
+    try:
+        return int(str(valor).split(":")[0])
+    except (TypeError, ValueError, IndexError):
+        return defecto
+
+
+def recolectar_usuario(name, tag, on_progress, demo=False, config=None):
     """Recolecta las variables del modelo + el perfil de un usuario.
 
-    Devuelve: {"variables": {...6 variables...}, "perfil": {...}}.
+    Devuelve: {"variables": {...}, "perfil": {...}, "extras": {...}}.
     on_progress(pct, mensaje) se llama en cada hito del proceso.
+    config: dict opcional con la Ventana de sueño del usuario
+            (sleepStart / sleepEnd en formato 'HH:MM') que define la
+            franja de juego nocturno para el cálculo del PJN.
     Si demo=True o no hay RIOT_API_KEY, se usa el modo simulado.
     """
+    cfg = config or {}
+    ni = _hora_de(cfg.get("sleepStart"), NOCHE_INICIO)
+    nf = _hora_de(cfg.get("sleepEnd"), NOCHE_FIN)
     if demo or not RIOT_API_KEY:
-        return _recolectar_demo(name, tag, on_progress)
-    return _recolectar_real(name, tag, on_progress)
+        return _recolectar_demo(name, tag, on_progress, ni, nf)
+    return _recolectar_real(name, tag, on_progress, ni, nf)

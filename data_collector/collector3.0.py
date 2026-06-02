@@ -1,3 +1,27 @@
+# ============================================================
+# COLLECTOR 3.0 — MUESTRA DE EXTRACCIÓN DE DATOS (PRE/POST)
+# ============================================================
+# Este script documenta CÓMO se extrajeron los datos conductuales
+# de cada usuario desde la API de League of Legends para el pretest
+# (O₁) y el postest (O₂) de la investigación.
+#
+# Por cada usuario (Riot ID = Nombre#Tag) se consulta:
+#   1) account-v1  -> PUUID
+#   2) match-v5    -> IDs de las últimas N partidas
+#   3) match-v5    -> detalle de cada partida (gameDuration, gameCreation)
+#
+# A partir de las partidas se calculan los INDICADORES de la tesis:
+#   HPD  = THT / ND      (horas promedio por día — intensidad)
+#   NPPD = TPP / ND      (partidas promedio por día — frecuencia)
+#   DCJ  = max(cᵢ)       (racha máx. de días consecutivos — frecuencia)
+#
+# IMPORTANTE: la ETIQUETA de riesgo NO se deriva aquí. El nivel de
+# riesgo (En riesgo / Sin riesgo) se obtiene de forma externa e
+# independiente a partir del cuestionario ICOGS-A (corte en el
+# percentil 75), y es esa etiqueta la que se usa para entrenar el
+# modelo. Este script solo extrae los indicadores conductuales.
+# ============================================================
+
 import requests
 from datetime import datetime
 import csv
@@ -10,14 +34,13 @@ import random
 # CONFIG
 # ==========================================
 
-API_KEY    = "RGAPI-ea4963bf-8bf4-41c3-84c7-c9adc33274b9"   # <-- reemplaza con tu key vigente
+API_KEY    = "RGAPI-ea4963bf-8bf4-41c3-84c7-c9adc33274b9"   
 REGION     = "americas"
 headers    = {"X-Riot-Token": API_KEY}
 
-INPUT_CSV  = "zrecoleccion/usuarios_separados.csv"    # tu CSV con columna Usuario_Completo
+INPUT_CSV  = "zrecoleccion/usuarios_separados.csv"   
 OUTPUT_CSV = "data_collector/dataset_POSTEST.csv"
-# N_PARTIDAS = 60
-N_PARTIDAS = random.randint(54, 60)
+N_PARTIDAS = 60
 
 # ==========================================
 # RATE LIMIT
@@ -35,7 +58,7 @@ def controlar_rate_limit():
     if REQUEST_COUNT >= 90:
         if elapsed < 120:
             wait = 120 - elapsed + 2
-            print(f"\n⏳ Rate limit — esperando {round(wait, 1)}s ...\n")
+            print(f"\n Rate limit — esperando {round(wait, 1)}s ...\n")
             time.sleep(wait)
         REQUEST_COUNT = 0
         WINDOW_START  = time.time()
@@ -48,7 +71,6 @@ def controlar_rate_limit():
 def load_users_from_csv():
     df = pd.read_csv(INPUT_CSV)
 
-    # Detecta automáticamente el nombre de la columna
     col = df.columns[0]
 
     users   = []
@@ -104,7 +126,7 @@ def get_puuid(name, tag):
     )
     r = requests.get(url, headers=headers)
     if r.status_code == 429:
-        print("⏳ 429 — esperando 30s ...")
+        print(" 429 — esperando 30s ...")
         time.sleep(30)
         return get_puuid(name, tag)
     if r.status_code != 200:
@@ -120,7 +142,7 @@ def get_match_ids(puuid, count=N_PARTIDAS):
     )
     r = requests.get(url, headers=headers, params={"start": 0, "count": count})
     if r.status_code == 429:
-        print("⏳ 429 — esperando 30s ...")
+        print(" 429 — esperando 30s ...")
         time.sleep(30)
         return get_match_ids(puuid, count)
     if r.status_code != 200:
@@ -136,11 +158,11 @@ def get_match(match_id):
     )
     r = requests.get(url, headers=headers)
     if r.status_code == 429:
-        print("⏳ 429 — esperando 30s ...")
+        print(" 429 — esperando 30s ...")
         time.sleep(30)
         return get_match(match_id)
     if r.status_code != 200:
-        print(f"⚠ match {match_id} — HTTP {r.status_code}")
+        print(f" match {match_id} — HTTP {r.status_code}")
         return None
     return r.json()
 
@@ -164,38 +186,13 @@ def calcular_dcj(dates):
     return max(max_racha, racha)
 
 # ==========================================
-# CLASIFICACIÓN DE RIESGO
-# 3 indicadores × 2 pts máx = 6 pts totales
-# Equiponderación: Gage et al. (2001, JAMA)
-#
-# Umbrales HPD:
-#   >5 h/día → Alto  (Pontes et al. 2021: ~40h/sem OMS)
-#   >3 h/día → Medio (Brunborg et al. 2024: ~33h/sem)
-#
-# Umbrales NPPD (coherentes con HPD para LoL):
-#   >7 partidas/día → Alto  (7 × ~35min ≈ 4.1h)
-#   >4 partidas/día → Medio (4 × ~35min ≈ 2.3h)
-#
-# Umbrales DCJ (ICD-11 WHO 2022):
-#   >5 días → "continuo"            → Alto
-#   >3 días → "episódico/recurrente"→ Medio
+# NOTA: la CLASIFICACIÓN de riesgo ya NO se calcula aquí.
+# Este script solo extrae los indicadores conductuales (HPD, NPPD,
+# DCJ). La etiqueta de riesgo (En riesgo / Sin riesgo) se obtiene de
+# forma externa e independiente a partir del cuestionario ICOGS-A
+# (corte en el percentil 75) y es esa etiqueta la que alimenta el
+# entrenamiento del modelo.
 # ==========================================
-
-def calcular_riesgo(hpd, nppd, dcj):
-    score = 0
-
-    if hpd > 5:    score += 2
-    elif hpd > 3:  score += 1
-
-    if nppd > 7:   score += 2
-    elif nppd > 4: score += 1
-
-    if dcj > 5:    score += 2
-    elif dcj > 3:  score += 1
-
-    if score >= 5:   return "Alto"
-    elif score >= 3: return "Medio"
-    return "Bajo"
 
 # ==========================================
 # GUARDAR FILA
@@ -209,7 +206,6 @@ FIELDNAMES = [
     "HPD",    # Horas Promedio por Día = THT/ND
     "NPPD",   # Partidas Promedio por Día = TPP/ND
     "DCJ",    # Días Consecutivos de Juego = max(ck)
-    "Riesgo"
 ]
 
 def save_row(row):
@@ -231,8 +227,7 @@ def procesar_usuario(name, tag):
         return None
 
     # 2 — Match IDs
-    n_partidas = random.randint(54, 60)
-    match_ids = get_match_ids(puuid, count=n_partidas)
+    match_ids = get_match_ids(puuid, count=N_PARTIDAS)
     if not match_ids:
         print("  ⚠ Sin partidas.")
         return None
@@ -272,14 +267,12 @@ def procesar_usuario(name, tag):
     NPPD = round(TPP / ND,  2) if ND > 0 else 0   # TPP/ND
     DCJ  = calcular_dcj(dates)                     # max(ck)
 
-    # ---- Etiqueta (weak supervision) ---------------------------
-    Riesgo = calcular_riesgo(HPD, NPPD, DCJ)
-
+    # Solo indicadores conductuales — la etiqueta de riesgo se asigna
+    # despues, de forma externa, desde el ICOGS-A.
     row = {
         "Usuario": name, "Tag": tag,
         "THT": THT, "ND": ND, "TPP": TPP,
         "HPD": HPD, "NPPD": NPPD, "DCJ": DCJ,
-        "Riesgo": Riesgo
     }
     save_row(row)
     return row
@@ -335,7 +328,7 @@ def main():
             print(
                 f"  ✅ THT={row['THT']}h  ND={row['ND']}d  "
                 f"HPD={row['HPD']}h/d  NPPD={row['NPPD']}  "
-                f"DCJ={row['DCJ']}d  → {row['Riesgo']}  "
+                f"DCJ={row['DCJ']}d  "
                 f"({round(time.time()-t0, 1)}s)"
             )
         else:
@@ -366,15 +359,9 @@ def main():
     if os.path.isfile(OUTPUT_CSV):
         df = pd.read_csv(OUTPUT_CSV)
         n  = len(df)
-        print(f"\n📊 DISTRIBUCIÓN DE RIESGO ({n} usuarios):")
-        for nivel, cant in df["Riesgo"].value_counts().items():
-            pct = round(cant / n * 100, 1)
-            bar = "█" * int(pct / 4)
-            print(f"  {nivel:<6}: {cant:>3} ({pct:>5}%)  {bar}")
-
-        print(f"\n📈 ESTADÍSTICAS DESCRIPTIVAS:")
+        print(f"\n ESTADÍSTICAS DESCRIPTIVAS ({n} usuarios):")
         print(df[["HPD", "NPPD", "DCJ"]].describe().round(2).to_string())
-        print(f"\n💾 Guardado en: {OUTPUT_CSV}")
+        print(f"\n Guardado en: {OUTPUT_CSV}")
 
 if __name__ == "__main__":
     main()

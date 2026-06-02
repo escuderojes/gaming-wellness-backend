@@ -25,7 +25,16 @@ def _job_collect(job_id, name, tag, demo, uid=None, datos_usuario=None):
     def progreso(pct, msg):
         jobs.actualizar(job_id, progreso=pct, paso=msg)
 
-    recoleccion = recolectar_usuario(name, tag, progreso, demo=demo)
+    # Ventana de sueño del usuario (para el PJN). Si no hay uid o config,
+    # recolectar_usuario usa la franja por defecto (22:00–06:00).
+    cfg = None
+    if uid and firestore_service.firestore_disponible():
+        try:
+            cfg = firestore_service.obtener_config(uid)
+        except Exception:  # noqa: BLE001
+            cfg = None
+
+    recoleccion = recolectar_usuario(name, tag, progreso, demo=demo, config=cfg)
     variables = recoleccion["variables"]
     perfil = recoleccion.get("perfil") or {}
     extras = recoleccion.get("extras") or {}

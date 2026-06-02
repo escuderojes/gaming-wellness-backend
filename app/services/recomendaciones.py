@@ -70,7 +70,7 @@ def generar_recomendaciones(variables, extras, config, prediccion):
     nivel = pred.get("nivel")
     score = pred.get("score")
 
-    # 1) Resumen segun el nivel del modelo --------------------------------
+    # 1) Resumen segun el nivel visual (Alto/Medio/Bajo) ------------------
     if nivel == "Alto":
         recos.append({
             "id": "nivel", "type": "critical", "tag": "Crítica",
@@ -78,8 +78,8 @@ def generar_recomendaciones(variables, extras, config, prediccion):
             "title": "Ojo — tu forma de jugar está generando señales de alerta",
             "desc": (f"El modelo ve un patrón de riesgo ALTO (score {score}/100). "
                      f"No es para alarmarse, pero sí para tomárselo en serio. "
-                     f"Esta semana sería un buen momento para reducir un poco las "
-                     f"sesiones y ver cómo te sientes."),
+                     f"Esta semana sería un buen momento para reducir las sesiones "
+                     f"y revisar tus metas."),
             "acciones": [],
         })
     elif nivel == "Medio":

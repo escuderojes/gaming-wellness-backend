@@ -30,7 +30,7 @@ DEFAULT_PASSWORD = "GameWell2024!"
 
 # ─── Mapeo email -> Riot ID (en orden del dataset) ─────────────────────
 USUARIOS = [
-    ("escuderosantillan@gmail.com",         "Aiso#P2W"),
+    ("itzel.rr2003@gmail.com",               "Aiso#P2W"),
     ("santillanescudero10@gmail.com",        "Tyson#nlove"),
     ("marioromero200201@gmail.com",          "TLK320#LAS"),
     ("axeljhosmell13@gmail.com",             "franchoski17#LAS"),
@@ -326,7 +326,7 @@ USUARIOS = [
     ("vane.ql03@gmail.com",                  "chérie lueur#maia"),
     ("marcos.vb22@gmail.com",                "IIIIIIIIIIIII#8413"),
     ("luz.ch20@gmail.com",                   "AlanBritoDl#LAS"),
-    ("itzel.rr2003@gmail.com",               "jeshuco#777"),
+    ("escuderosantillan@gmail.com",           "jeshuco#777"),
     ("miguelzegarra99@gmail.com",            "zun#TLUCH"),
     ("ara.cc01@gmail.com",                   "Sephiroth#SSSSS"),
     ("humbertofas@gmail.com",                "R Inst#8092"),
