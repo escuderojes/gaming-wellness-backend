@@ -292,10 +292,7 @@ def generar_prediccion_futura(variables, extras, config, historial, prediccion_a
         indicador_critico = "general"
 
     # ── Proyección de score ───────────────────────────────────────────
-    # La parte "elástica" del score (la que puede mejorar con comportamiento)
-    # excluye el piso de 15 puntos que representa factores no modificables.
-    score_riesgo = max(score_actual - 15, 0)
-
+    # El cambio de habito ajusta el score proyectado de cada horizonte.
     def _proyectar(dias, hpd_nuevo, k):
         """Score proyectado en `dias` días dado un cambio de HPD con coeficiente k.
 
@@ -307,7 +304,8 @@ def generar_prediccion_futura(variables, extras, config, historial, prediccion_a
         score_base = score_actual + tasa * time_factor
         if hpd_actual > 0 and abs(hpd_nuevo - hpd_actual) > 0.01:
             delta_ratio = (hpd_nuevo - hpd_actual) / hpd_actual
-            score_base += delta_ratio * score_riesgo * k * time_factor
+            # si baja el HPD, el escenario debe mostrar una reduccion visible.
+            score_base += delta_ratio * max(score_base, 1.0) * k * time_factor
         return max(0.0, min(100.0, round(score_base, 1)))
 
     hpd_mejora = round(hpd_actual * 0.8, 2)
@@ -315,7 +313,15 @@ def generar_prediccion_futura(variables, extras, config, historial, prediccion_a
     # Escenario saludable: usa la meta del sistema si es más exigente que
     # la mejora moderada (HPD menor). Si la meta es más laxa, usa hpd_mejora
     # para que "Alcanzando tu meta" sea siempre ≥ "Con mejora moderada".
-    meta_hpd = float((meta_activa or {}).get("hpd_objetivo") or 0)
+    meta_sistema_hpd = float((meta_activa or {}).get("hpd_objetivo") or 0)
+    meta_config_hpd = float(cfg.get("hpdMax") or 0)
+    metas_hpd = [m for m in (meta_sistema_hpd, meta_config_hpd) if m > 0]
+    meta_hpd = min(metas_hpd) if metas_hpd else 0
+    meta_etiqueta = (
+        "Meta configurada"
+        if meta_config_hpd > 0 and (meta_sistema_hpd <= 0 or meta_config_hpd <= meta_sistema_hpd)
+        else (meta_activa or {}).get("etiqueta", "Meta del sistema")
+    )
     if meta_hpd > 0 and meta_hpd < hpd_actual:
         hpd_saludable = round(min(meta_hpd, hpd_mejora), 2)
     else:
@@ -372,7 +378,7 @@ def generar_prediccion_futura(variables, extras, config, historial, prediccion_a
         "saludable": {
             "titulo":    "Alcanzando tu meta",
             "subtitulo": (
-                f"HPD → {meta_hpd:.1f} h/día · {(meta_activa or {}).get('etiqueta', 'Meta del sistema')}"
+                f"HPD → {meta_hpd:.1f} h/día · {meta_etiqueta}"
                 if meta_hpd > 0 and meta_hpd < hpd_actual
                 else f"HPD → {hpd_saludable:.1f} h/día (meta)"
             ),
@@ -386,7 +392,7 @@ def generar_prediccion_futura(variables, extras, config, historial, prediccion_a
                 _msg_meta(
                     h14["nivel_saludable"],
                     round(meta_hpd, 1) if meta_hpd > 0 and meta_hpd < hpd_actual else round(hpd_saludable, 1),
-                    (meta_activa or {}).get("etiqueta", "meta del sistema"),
+                    meta_etiqueta,
                 )
                 if meta_activa
                 else _get_msg(
