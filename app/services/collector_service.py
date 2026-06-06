@@ -9,11 +9,6 @@ Devuelve un dict con dos partes:
   - "perfil":    datos de identidad del invocador (icono, nivel) que
                  NO van al modelo, solo enriquecen el dashboard.
 
-Dos modos:
-  - real : consulta la Riot API. Requiere la variable de entorno
-           RIOT_API_KEY con una key vigente.
-  - demo : simula el proceso (sin red) con metricas plausibles.
-           Util para probar el flujo sin depender de la API.
 """
 import os
 import time
@@ -27,7 +22,7 @@ RIOT_API_KEY = os.environ.get("RIOT_API_KEY", "")
 
 # Routing regional (account-v1, match-v5).
 REGION = "americas"
-# Plataforma para summoner-v4 (LAS = la1). El proyecto opera en LAS.
+# Plataforma para summoner-v4 (LAS = la2). El proyecto opera en LAS.
 PLATFORM = "la2"
 
 # Version de Data Dragon usada para construir la URL del icono de perfil.

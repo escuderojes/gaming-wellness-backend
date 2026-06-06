@@ -95,7 +95,7 @@ def _es_noche(h):
     return h >= NOCHE_INICIO or h < NOCHE_FIN
 
 
-def _extras_para_fecha(hpd, tht, nd, ref_date: date, perfil: str, seed: int) -> dict:
+def _extras_para_fecha(hpd, nd, ref_date: date, perfil: str, seed: int) -> dict:
     """Genera extras simulados con fecha de referencia histórica y seed fijo.
 
     Tanto porHora como porDiaSemana usan tts_semana como base común para que
@@ -395,8 +395,7 @@ def main():
                 fecha_dt  = _timestamp_aleatorio(ref_date, seed)
                 prediccion = predecir(variables)
                 extras     = _extras_para_fecha(
-                    hpd=variables["HPD"], tht=variables["THT"],
-                    nd=variables["ND"],   ref_date=ref_date,
+                    hpd=variables["HPD"], nd=variables["ND"], ref_date=ref_date,
                     perfil=perfil,        seed=seed,
                 )
                 rec_id = _guardar_recoleccion_historica(

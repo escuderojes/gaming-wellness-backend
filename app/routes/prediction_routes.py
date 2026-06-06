@@ -8,6 +8,8 @@ prediction_bp = Blueprint("prediction", __name__)
 @prediction_bp.route("/predict", methods=["POST"])
 def predict():
     """Clasifica el nivel de riesgo de uso excesivo.
+
+    recibe las variables del modelo y devuelve la prediccion actual.
     ---
     tags:
       - Prediccion

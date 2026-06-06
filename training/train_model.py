@@ -1,10 +1,6 @@
-# ============================================================
-# SISTEMA PREDICTIVO - GAMING DISORDER  (CLASIFICACIÓN BINARIA)
+
 # ============================================================
 # Etiqueta: Riesgo_ICOGS_A (1 = en riesgo / 0 = sin riesgo)
-# derivada del cuestionario ICOGS-A (12 ítems) por umbral P75
-# intra-muestra sobre el pretest. Reemplaza la antigua etiqueta
-# heurística de 3 clases (Alto/Medio/Bajo).
 # ============================================================
 
 import pandas as pd
@@ -12,7 +8,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import joblib
-from scipy import stats
 
 from sklearn.model_selection import (
     train_test_split,
@@ -25,10 +20,7 @@ from sklearn.metrics import (
     f1_score, confusion_matrix, classification_report,
     roc_curve, auc
 )
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
-from sklearn.utils.class_weight import compute_sample_weight
 
 
 # ============================================================

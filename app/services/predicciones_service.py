@@ -97,7 +97,7 @@ _MSGS = {
         "general":  "Tu situación es saludable. Mantener este equilibrio es todo lo que necesitas.",
         "hpd":      "Tus horas de juego están bajo control. Así se ve un buen hábito.",
         "dcj":      "Incluir días sin jugar en tu semana es clave para sostener este nivel.",
-        "pjn":      "Sin juego nocturno, tu sueño y energía se mantienen estables. Bien.",
+        "pjn":      "Tu riesgo general sigue bajo, pero el juego nocturno está alto. Cuidar el horario evitará que suba.",
     },
     ("Bajo", "empeorando"): {
         "general":  "Todavía estás en zona segura, pero tu tendencia está subiendo. Presta atención.",

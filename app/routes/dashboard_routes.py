@@ -10,6 +10,9 @@ la configuracion. Las metricas extra que muestra el frontend (PJN,
 TTS semanal, distribucion por dia, alertas) dependen de extender el
 colector y de la capa de reglas — pendientes en el roadmap.
 """
+import logging
+import traceback
+
 from flask import Blueprint, request, jsonify
 
 from app.services import firestore_service
@@ -339,7 +342,6 @@ def get_recomendaciones():
         ultima = firestore_service.obtener_ultima_recoleccion(uid)
         config = firestore_service.obtener_config(uid)
     except Exception as exc:
-        import traceback, logging
         logging.error("Error leyendo Firestore en /recomendaciones: %s\n%s",
                       exc, traceback.format_exc())
         return jsonify({"error": str(exc), "tiene_datos": False,
@@ -361,7 +363,6 @@ def get_recomendaciones():
         recos = reglas.generar_recomendaciones(variables, extras, config, prediccion)
         cum   = reglas.calcular_cumplimiento(variables, extras, config)
     except Exception as exc:
-        import traceback, logging
         logging.error("Error en capa de reglas: %s\n%s", exc, traceback.format_exc())
         return jsonify({"error": str(exc), "tiene_datos": False,
                         "recomendaciones": [], "cumplimiento": None}), 500

@@ -7,6 +7,7 @@ def create_app():
     app = Flask(__name__)
     CORS(app)
 
+    # registra las rutas de la api en un solo lugar.
     from app.routes.prediction_routes import prediction_bp
     from app.routes.collect_routes import collect_bp
     from app.routes.dashboard_routes import dashboard_bp
@@ -23,7 +24,7 @@ def create_app():
     app.register_blueprint(resetear_cuenta_bp, url_prefix="/api")
     app.register_blueprint(metas_bp, url_prefix="/api")
 
-    # Documentacion interactiva (Swagger UI) disponible en /apidocs/
+    # documentacion interactiva disponible en /apidocs/.
     app.config["SWAGGER"] = {
         "title": "Gaming Wellness Prevent - API",
         "description": "API del sistema predictivo de uso excesivo en gaming.",

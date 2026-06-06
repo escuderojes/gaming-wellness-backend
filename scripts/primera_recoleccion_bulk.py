@@ -16,7 +16,6 @@ import sys
 import time
 import argparse
 from pathlib import Path
-from datetime import datetime, timezone
 
 BASE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BASE))
@@ -55,7 +54,7 @@ def _tiene_recolecciones(db, uid: str) -> bool:
     return len(snap) > 0
 
 
-def _lanzar_real(uid: str, name: str, tag: str, db) -> bool:
+def _lanzar_real(uid: str, name: str, tag: str) -> bool:
     """Ejecuta la recolección REAL contra Riot API y la persiste en Firestore."""
     try:
         from app.services.collector_service import recolectar_usuario
@@ -189,7 +188,7 @@ def main():
     for idx, (uid, email, riot_id) in enumerate(objetivo, 1):
         name, tag = riot_id.rsplit("#", 1)
         print(f"  [{idx:3d}/{len(objetivo)}] {email} → {riot_id}")
-        exito = _lanzar_real(uid, name, tag, db)
+        exito = _lanzar_real(uid, name, tag)
         if exito:
             ok += 1
             print(f"      ✓ Guardado\n")
