@@ -19,23 +19,68 @@ def _nivel(score):
     return "Bajo"
 
 
-def _score_prediccion(prediccion):
-    """Obtiene el score 0-100 conservando probabilidades bajas no nulas."""
-    pred = prediccion or {}
+def _float_or_none(valor):
     try:
-        score = float(pred.get("score") or 0)
+        return float(valor)
     except (TypeError, ValueError):
-        score = 0.0
+        return None
+
+
+def _score_desde_modelo(variables):
+    """Recalcula el score con el modelo cuando la prediccion guardada no lo trae."""
+    v = variables or {}
+    requeridas = ("ND", "HPD", "DCJ")
+    if any(v.get(k) is None for k in requeridas):
+        return None
+
+    try:
+        from app.services.model_service import predecir
+    except Exception:
+        try:
+            import importlib.util
+            from pathlib import Path
+
+            path = Path(__file__).with_name("model_service.py")
+            spec = importlib.util.spec_from_file_location("model_service", path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            predecir = module.predecir
+        except Exception:
+            return None
+
+    try:
+        pred = predecir({k: v[k] for k in requeridas})
+    except Exception:
+        return None
+
+    score = _float_or_none(pred.get("score"))
+    if score is not None:
+        return score
 
     probs = pred.get("probabilidades") or {}
-    try:
-        score_prob = float(probs.get("Riesgo") or 0) * 100
-    except (TypeError, ValueError):
-        score_prob = 0.0
+    riesgo = _float_or_none(probs.get("Riesgo"))
+    return round(riesgo * 100, 1) if riesgo is not None else None
 
-    if score == 0 and score_prob > 0:
-        return round(score_prob, 1)
-    return score
+
+def _score_prediccion(prediccion, variables=None):
+    """Obtiene el score 0-100 sin confundir dato ausente con riesgo 0."""
+    pred = prediccion or {}
+    score = None
+    if "score" in pred and pred.get("score") not in (None, ""):
+        score = _float_or_none(pred.get("score"))
+
+    probs = pred.get("probabilidades") or {}
+    riesgo = _float_or_none(probs.get("Riesgo"))
+    score_prob = round(riesgo * 100, 1) if riesgo is not None else None
+
+    if score == 0 and score_prob and score_prob > 0:
+        return score_prob
+    if score is not None:
+        return score
+    if score_prob is not None:
+        return score_prob
+
+    return _score_desde_modelo(variables)
 
 
 # ─── Templates de mensajes ────────────────────────────────────────────
@@ -160,21 +205,55 @@ def generar_prediccion_futura(variables, extras, config, historial, prediccion_a
     pjn_actual   = float(ext.get("pjnMin") or 0)
     hpd_max      = float(cfg.get("hpdMax") or 5)
     dcj_max      = float(cfg.get("dcjMax") or 5)
-    score_actual = _score_prediccion(prediccion_actual)
+    score_actual = _score_prediccion(prediccion_actual, v)
+    if score_actual is None:
+        return {
+            "disponible": False,
+            "motivo": "sin_score_modelo",
+            "mensaje": (
+                "No hay una prediccion valida para proyectar. "
+                "Se necesita score, probabilidades o variables ND/HPD/DCJ."
+            ),
+            "tendencia": {
+                "tipo": "sin_datos",
+                "tasa": None,
+                "detalle": "No hay score de modelo suficiente para calcular tendencia.",
+                "historial_suficiente": False,
+            },
+            "horizontes": [],
+            "escenarios": {},
+            "indicador_critico": None,
+            "alertas": [],
+        }
 
     # ── Calcular tendencia lineal ─────────────────────────────────────
     recs   = historial or []
     n_recs = len(recs)
 
-    if n_recs >= 2:
-        score_nuevo = _score_prediccion(recs[0].get("prediccion")) or score_actual
-        score_viejo = _score_prediccion(recs[-1].get("prediccion")) or score_actual
+    historial_suficiente = n_recs >= 2
+
+    if historial_suficiente:
+        score_nuevo = _score_prediccion(
+            recs[0].get("prediccion"), recs[0].get("variables")
+        )
+        score_viejo = _score_prediccion(
+            recs[-1].get("prediccion"), recs[-1].get("variables")
+        )
+        if score_nuevo is None:
+            score_nuevo = score_actual
+        if score_viejo is None:
+            score_viejo = score_actual
         n_intervals = max(n_recs - 1, 1)
         tasa = (score_nuevo - score_viejo) / n_intervals  # delta de score por período ~14d
     else:
         tasa = 0.0
 
-    if tasa < -5:
+    if not historial_suficiente:
+        tendencia_tipo = "insuficiente"
+        tendencia_det = (
+            "Se necesita al menos 2 recolecciones para calcular una tendencia real."
+        )
+    elif tasa < -5:
         tendencia_tipo = "mejorando"
         tendencia_det  = (
             f"Tu riesgo bajó {abs(tasa):.1f} puntos por medición "
@@ -194,7 +273,13 @@ def generar_prediccion_futura(variables, extras, config, historial, prediccion_a
         "tipo":    tendencia_tipo,
         "tasa":    round(tasa, 2),
         "detalle": tendencia_det,
+        "historial_suficiente": historial_suficiente,
     }
+
+    tendencia_mensajes = (
+        tendencia_tipo if tendencia_tipo in ("mejorando", "estable", "empeorando")
+        else "estable"
+    )
 
     # ── Indicador crítico (determina qué mensaje mostrar) ─────────────
     if dcj_actual > dcj_max * 1.2:
@@ -268,7 +353,7 @@ def generar_prediccion_futura(variables, extras, config, historial, prediccion_a
             "score":     h14["score_actual"],
             "nivel":     h14["nivel_actual"],
             "mensaje":   _get_msg(
-                h14["nivel_actual"], tendencia_tipo, indicador_critico,
+                h14["nivel_actual"], tendencia_mensajes, indicador_critico,
                 hpd=hpd_actual, dcj=dcj_actual, pjn=pjn_actual,
             ),
         },
@@ -331,6 +416,8 @@ def generar_prediccion_futura(variables, extras, config, historial, prediccion_a
         )
 
     return {
+        "disponible":         True,
+        "score_base":         round(score_actual, 1),
         "tendencia":         tendencia,
         "horizontes":        horizontes,
         "escenarios":        escenarios,
