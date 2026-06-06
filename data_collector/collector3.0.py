@@ -17,7 +17,6 @@
 # A partir de las partidas se calculan los INDICADORES de la tesis:
 #   HPD  = THT / ND      (intensidad del uso — OE1)
 #   DCJ  = max(cᵢ)       (persistencia: racha máx. de días consecutivos — OE2)
-# NPPD se conserva como variable complementaria (alta correlación con HPD).
 #
 # IMPORTANTE: la ETIQUETA de riesgo NO se deriva aquí. El nivel de
 # riesgo (En riesgo / Sin riesgo) se obtiene de forma externa e
@@ -38,12 +37,12 @@ import random
 # CONFIG
 # ==========================================
 
-API_KEY    = "RGAPI-ea4963bf-8bf4-41c3-84c7-c9adc33274b9"   
+API_KEY    = "RGAPI-88715abd-2096-4e9e-af62-04ebee11e037"   
 REGION     = "americas"
 headers    = {"X-Riot-Token": API_KEY}
 
 INPUT_CSV  = "zrecoleccion/usuarios_separados.csv"
-OUTPUT_CSV = "data_collector/dataset_POSTEST.csv"
+OUTPUT_CSV = "data_collector/dataset_PRUEBA.csv"
 # Ventana de observacion temporal: ultimos PERIODO_DIAS dias (no por nro
 # de partidas). Garantiza ND <= PERIODO_DIAS y HPD comparable entre usuarios.
 PERIODO_DIAS = 14
@@ -185,20 +184,33 @@ def get_match(match_id):
 def calcular_dcj(dates):
     sorted_days = sorted(set(d.date() for d in dates))
     if not sorted_days:
-        return 0
+        return 0, "", ""
+
     racha = max_racha = 1
+    inicio_racha = mejor_inicio = mejor_fin = sorted_days[0]
+
     for i in range(1, len(sorted_days)):
         if (sorted_days[i] - sorted_days[i - 1]).days == 1:
             racha += 1
         else:
-            max_racha = max(max_racha, racha)
+            if racha > max_racha:
+                max_racha = racha
+                mejor_inicio = inicio_racha
+                mejor_fin = sorted_days[i - 1]
             racha = 1
-    return max(max_racha, racha)
+            inicio_racha = sorted_days[i]
+
+    if racha > max_racha:
+        max_racha = racha
+        mejor_inicio = inicio_racha
+        mejor_fin = sorted_days[-1]
+
+    return max_racha, mejor_inicio.isoformat(), mejor_fin.isoformat()
 
 # ==========================================
 # NOTA: la CLASIFICACIÓN de riesgo ya NO se calcula aquí.
-# Este script solo extrae los indicadores conductuales (HPD, NPPD,
-# DCJ). La etiqueta de riesgo (En riesgo / Sin riesgo) se obtiene de
+# Este script solo extrae los indicadores conductuales (HPD, DCJ).
+# La etiqueta de riesgo (En riesgo / Sin riesgo) se obtiene de
 # forma externa e independiente a partir del cuestionario ICOGS-A
 # (corte en el percentil 75) y es esa etiqueta la que alimenta el
 # entrenamiento del modelo.
@@ -212,11 +224,26 @@ FIELDNAMES = [
     "Usuario", "Tag",
     "THT",    # Tiempo Total Horas jugadas (Seif El-Nasr et al. 2021)
     "ND",     # Número de Días con actividad (Seif El-Nasr et al. 2021)
-    "TPP",    # Total Partidas del Período
     "HPD",    # Horas Promedio por Día = THT/ND
-    "NPPD",   # Partidas Promedio por Día = TPP/ND
     "DCJ",    # Días Consecutivos de Juego = max(ck)
+    "DCJ_FI", # Fecha de inicio de la racha máxima
+    "DCJ_FF", # Fecha de fin de la racha máxima
 ]
+
+def normalize_output_csv():
+    if not os.path.isfile(OUTPUT_CSV):
+        return
+
+    df = pd.read_csv(OUTPUT_CSV)
+    extra_cols = [c for c in ("TPP", "NPPD") if c in df.columns]
+    missing_cols = [c for c in FIELDNAMES if c not in df.columns]
+    if not extra_cols and not missing_cols:
+        return
+
+    for col in missing_cols:
+        df[col] = ""
+    df = df[[c for c in FIELDNAMES if c in df.columns]]
+    df.to_csv(OUTPUT_CSV, index=False, encoding="utf-8")
 
 def save_row(row):
     file_exists = os.path.isfile(OUTPUT_CSV)
@@ -270,19 +297,18 @@ def procesar_usuario(name, tag):
     # ---- Variables base ----------------------------------------
     THT = round(sum(durations), 2)           # horas totales
     ND  = len(set(d.date() for d in dates))  # días únicos con actividad
-    TPP = len(durations)                     # total partidas válidas
 
     # ---- Indicadores (Tabla 1 tesis) ---------------------------
     HPD  = round(THT / ND,  2) if ND > 0 else 0   # THT/ND
-    NPPD = round(TPP / ND,  2) if ND > 0 else 0   # TPP/ND
-    DCJ  = calcular_dcj(dates)                     # max(ck)
+    DCJ, DCJ_FI, DCJ_FF = calcular_dcj(dates)       # max(ck) y rango
 
     # Solo indicadores conductuales — la etiqueta de riesgo se asigna
     # despues, de forma externa, desde el ICOGS-A.
     row = {
         "Usuario": name, "Tag": tag,
-        "THT": THT, "ND": ND, "TPP": TPP,
-        "HPD": HPD, "NPPD": NPPD, "DCJ": DCJ,
+        "THT": THT, "ND": ND,
+        "HPD": HPD, "DCJ": DCJ,
+        "DCJ_FI": DCJ_FI, "DCJ_FF": DCJ_FF,
     }
     save_row(row)
     return row
@@ -292,6 +318,8 @@ def procesar_usuario(name, tag):
 # ==========================================
 
 def main():
+    normalize_output_csv()
+
     # Cargar todos los usuarios del CSV
     all_users = load_users_from_csv()
     processed = load_processed_users()
@@ -337,8 +365,8 @@ def main():
             exitos += 1
             print(
                 f"  ✅ THT={row['THT']}h  ND={row['ND']}d  "
-                f"HPD={row['HPD']}h/d  NPPD={row['NPPD']}  "
-                f"DCJ={row['DCJ']}d  "
+                f"HPD={row['HPD']}h/d  "
+                f"DCJ={row['DCJ']}d ({row['DCJ_FI']} a {row['DCJ_FF']})  "
                 f"({round(time.time()-t0, 1)}s)"
             )
         else:
@@ -370,7 +398,7 @@ def main():
         df = pd.read_csv(OUTPUT_CSV)
         n  = len(df)
         print(f"\n ESTADÍSTICAS DESCRIPTIVAS ({n} usuarios):")
-        print(df[["HPD", "NPPD", "DCJ"]].describe().round(2).to_string())
+        print(df[["HPD", "DCJ"]].describe().round(2).to_string())
         print(f"\n Guardado en: {OUTPUT_CSV}")
 
 if __name__ == "__main__":

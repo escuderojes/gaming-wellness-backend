@@ -19,6 +19,25 @@ def _nivel(score):
     return "Bajo"
 
 
+def _score_prediccion(prediccion):
+    """Obtiene el score 0-100 conservando probabilidades bajas no nulas."""
+    pred = prediccion or {}
+    try:
+        score = float(pred.get("score") or 0)
+    except (TypeError, ValueError):
+        score = 0.0
+
+    probs = pred.get("probabilidades") or {}
+    try:
+        score_prob = float(probs.get("Riesgo") or 0) * 100
+    except (TypeError, ValueError):
+        score_prob = 0.0
+
+    if score == 0 and score_prob > 0:
+        return round(score_prob, 1)
+    return score
+
+
 # ─── Templates de mensajes ────────────────────────────────────────────
 # Clave: (nivel_proyectado, tipo_tendencia)
 # Valor: dict {indicador_critico → mensaje}
@@ -141,15 +160,15 @@ def generar_prediccion_futura(variables, extras, config, historial, prediccion_a
     pjn_actual   = float(ext.get("pjnMin") or 0)
     hpd_max      = float(cfg.get("hpdMax") or 5)
     dcj_max      = float(cfg.get("dcjMax") or 5)
-    score_actual = float((prediccion_actual or {}).get("score") or 0)
+    score_actual = _score_prediccion(prediccion_actual)
 
     # ── Calcular tendencia lineal ─────────────────────────────────────
     recs   = historial or []
     n_recs = len(recs)
 
     if n_recs >= 2:
-        score_nuevo = float(((recs[0].get("prediccion") or {}).get("score")) or score_actual)
-        score_viejo = float(((recs[-1].get("prediccion") or {}).get("score")) or score_actual)
+        score_nuevo = _score_prediccion(recs[0].get("prediccion")) or score_actual
+        score_viejo = _score_prediccion(recs[-1].get("prediccion")) or score_actual
         n_intervals = max(n_recs - 1, 1)
         tasa = (score_nuevo - score_viejo) / n_intervals  # delta de score por período ~14d
     else:

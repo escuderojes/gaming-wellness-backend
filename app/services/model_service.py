@@ -81,7 +81,8 @@ def predecir(fila):
     }
 
     # Score 0-100 = probabilidad de la clase "Riesgo".
-    score = round(probabilidades.get(CLASE_RIESGO, 0.0) * 100)
+    # Se conserva 1 decimal para no borrar riesgos bajos como 0.4 -> 0.
+    score = round(probabilidades.get(CLASE_RIESGO, 0.0) * 100, 1)
 
     # Nivel visual (Alto/Medio/Bajo) derivado del score, y bandera
     # binaria de riesgo (clase predicha por el modelo) para las alertas.
