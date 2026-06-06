@@ -266,14 +266,15 @@ def _calcular_agregados(recolecciones):
     if total == 0:
         return {
             "totalRecolecciones": 0,
-            "distribucionNivel": {"Alto": 0, "Medio": 0, "Bajo": 0},
+            "distribucionNivel": {"Con riesgo": 0, "Sin riesgo": 0},
             "promedios": {},
             "thtAcumulado": 0.0,
         }
 
     claves = ["THT", "ND", "TP", "HPD", "NPPD", "DCJ"]
     sumas = {k: 0.0 for k in claves}
-    distribucion = {"Alto": 0, "Medio": 0, "Bajo": 0}
+    # Distribucion binaria: con riesgo / sin riesgo.
+    distribucion = {"Con riesgo": 0, "Sin riesgo": 0}
 
     for rec in recolecciones:
         variables = rec.get("variables") or {}
@@ -282,9 +283,20 @@ def _calcular_agregados(recolecciones):
                 sumas[k] += float(variables.get(k, 0) or 0)
             except (TypeError, ValueError):
                 pass
-        nivel = (rec.get("prediccion") or {}).get("nivel")
-        if nivel in distribucion:
-            distribucion[nivel] += 1
+        pred = rec.get("prediccion") or {}
+        # Determina si la recoleccion es "con riesgo" de forma robusta:
+        # campos binarios nuevos (en_riesgo / clase) o, si son datos antiguos,
+        # el nivel heuristico (Alto/Medio = con riesgo; Bajo = sin riesgo) o el
+        # score (>=50 = con riesgo).
+        nivel = pred.get("nivel")
+        score = pred.get("score")
+        en_riesgo = (
+            pred.get("en_riesgo") is True
+            or pred.get("clase") == "Riesgo"
+            or nivel in ("Riesgo", "Alto", "Medio")
+            or (isinstance(score, (int, float)) and score >= 50)
+        )
+        distribucion["Con riesgo" if en_riesgo else "Sin riesgo"] += 1
 
     promedios = {k: round(sumas[k] / total, 2) for k in claves}
 

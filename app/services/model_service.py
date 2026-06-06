@@ -88,11 +88,17 @@ def predecir(fila):
     nivel = nivel_visual(score)
     en_riesgo = clase == CLASE_RIESGO
 
+    # Confianza del modelo en su clasificacion = probabilidad de la clase
+    # predicha (0-100). Es la metrica honesta para un clasificador binario:
+    # "que tan seguro esta el modelo del estado asignado".
+    confianza = round(max(probabilidades.values()) * 100, 1) if probabilidades else 0.0
+
     return {
         "nivel": nivel,
         "nivel_label": nivel.upper(),
         "clase": clase,
         "en_riesgo": en_riesgo,
         "score": score,
+        "confianza": confianza,
         "probabilidades": probabilidades,
     }
