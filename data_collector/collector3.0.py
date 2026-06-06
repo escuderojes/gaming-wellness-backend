@@ -7,19 +7,23 @@
 #
 # Por cada usuario (Riot ID = Nombre#Tag) se consulta:
 #   1) account-v1  -> PUUID
-#   2) match-v5    -> IDs de las últimas N partidas
+#   2) match-v5    -> IDs de las partidas de los ULTIMOS 14 DÍAS (ventana
+#                     temporal fija, vía startTime). NO por nro de partidas.
 #   3) match-v5    -> detalle de cada partida (gameDuration, gameCreation)
 #
+# La ventana de 14 días garantiza que ND <= 14 y que HPD sea comparable
+# entre usuarios (mismo período de observación para todos).
+#
 # A partir de las partidas se calculan los INDICADORES de la tesis:
-#   HPD  = THT / ND      (horas promedio por día — intensidad)
-#   NPPD = TPP / ND      (partidas promedio por día — frecuencia)
-#   DCJ  = max(cᵢ)       (racha máx. de días consecutivos — frecuencia)
+#   HPD  = THT / ND      (intensidad del uso — OE1)
+#   DCJ  = max(cᵢ)       (persistencia: racha máx. de días consecutivos — OE2)
+# NPPD se conserva como variable complementaria (alta correlación con HPD).
 #
 # IMPORTANTE: la ETIQUETA de riesgo NO se deriva aquí. El nivel de
 # riesgo (En riesgo / Sin riesgo) se obtiene de forma externa e
-# independiente a partir del cuestionario ICOGS-A (corte en el
-# percentil 75), y es esa etiqueta la que se usa para entrenar el
-# modelo. Este script solo extrae los indicadores conductuales.
+# independiente a partir del cuestionario ICOGS-A (corte = 36, punto
+# medio de la escala 12–60), y es esa etiqueta la que entrena el modelo.
+# Este script solo extrae los indicadores conductuales.
 # ============================================================
 
 import requests
@@ -38,9 +42,12 @@ API_KEY    = "RGAPI-ea4963bf-8bf4-41c3-84c7-c9adc33274b9"
 REGION     = "americas"
 headers    = {"X-Riot-Token": API_KEY}
 
-INPUT_CSV  = "zrecoleccion/usuarios_separados.csv"   
+INPUT_CSV  = "zrecoleccion/usuarios_separados.csv"
 OUTPUT_CSV = "data_collector/dataset_POSTEST.csv"
-N_PARTIDAS = 60
+# Ventana de observacion temporal: ultimos PERIODO_DIAS dias (no por nro
+# de partidas). Garantiza ND <= PERIODO_DIAS y HPD comparable entre usuarios.
+PERIODO_DIAS = 14
+N_PARTIDAS = 100   # tope superior de partidas a traer dentro de la ventana
 
 # ==========================================
 # RATE LIMIT
@@ -140,7 +147,10 @@ def get_match_ids(puuid, count=N_PARTIDAS):
         f"https://{REGION}.api.riotgames.com"
         f"/lol/match/v5/matches/by-puuid/{puuid}/ids"
     )
-    r = requests.get(url, headers=headers, params={"start": 0, "count": count})
+    # Filtra por ventana temporal: solo partidas de los ultimos PERIODO_DIAS dias.
+    start_epoch = int(time.time() - PERIODO_DIAS * 86400)
+    r = requests.get(url, headers=headers,
+                     params={"startTime": start_epoch, "start": 0, "count": count})
     if r.status_code == 429:
         print(" 429 — esperando 30s ...")
         time.sleep(30)

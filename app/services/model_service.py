@@ -14,8 +14,10 @@ from sklearn.linear_model import LogisticRegression
 # services -> app -> Backend (donde estan los .pkl)
 BASE = Path(__file__).resolve().parents[2]
 
-# Orden EXACTO de variables con el que se entreno el modelo.
-FEATURES = ["THT", "ND", "TP", "HPD", "NPPD", "DCJ"]
+# Orden EXACTO de features con el que se entreno el modelo.
+# Solo los indicadores conductuales con señal real. THT, TP y NPPD se
+# recolectan como variables extra (dashboard) pero NO entran al modelo.
+FEATURES = ["ND", "HPD", "DCJ"]
 
 # Clasificacion binaria (ICOGS-A): 0 = "Sin riesgo", 1 = "Riesgo".
 # El score 0-100 es la probabilidad de la clase "Riesgo".

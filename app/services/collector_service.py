@@ -34,6 +34,13 @@ PLATFORM = "la2"
 # Se intenta leer la ultima version publica; si falla, se usa esta.
 DDRAGON_VERSION_FALLBACK = "15.10.1"
 
+# Ventana de observacion: ultimos PERIODO_DIAS dias (no por nro de partidas).
+# Garantiza que ND <= PERIODO_DIAS y que HPD sea comparable entre usuarios.
+PERIODO_DIAS = 14
+# Minimo de partidas en la ventana para considerar la evaluacion valida.
+# Si hay menos, se reporta "sin actividad reciente" (Opcion 1 refinada).
+MIN_PARTIDAS_VENTANA = 3
+
 # Ventana nocturna para el calculo de PJN (juego nocturno).
 NOCHE_INICIO = 22  # 22:00
 NOCHE_FIN = 6      # 06:00
@@ -135,15 +142,20 @@ def _recolectar_real(name, tag, on_progress, noche_inicio=NOCHE_INICIO, noche_fi
     perfil = _perfil_invocador(puuid, headers)
 
     on_progress(*PASOS[1])
-    n_partidas = 60  # numero fijo de partidas a recolectar
+    # Ventana temporal: partidas de los ultimos PERIODO_DIAS dias.
+    # match-v5 acepta startTime (epoch en segundos) para filtrar por fecha.
+    start_epoch = int((datetime.now() - timedelta(days=PERIODO_DIAS)).timestamp())
     match_ids = _riot_get(
         f"https://{REGION}.api.riotgames.com"
         f"/lol/match/v5/matches/by-puuid/{puuid}/ids",
         headers,
-        params={"start": 0, "count": n_partidas},
+        params={"startTime": start_epoch, "start": 0, "count": 100},
     )
-    if not match_ids:
-        raise RuntimeError("El usuario no tiene partidas recientes.")
+    if not match_ids or len(match_ids) < MIN_PARTIDAS_VENTANA:
+        raise RuntimeError(
+            f"Sin actividad reciente: el usuario tiene menos de "
+            f"{MIN_PARTIDAS_VENTANA} partidas en los ultimos {PERIODO_DIAS} dias."
+        )
 
     durations, dates = [], []
     total = len(match_ids)
@@ -351,11 +363,10 @@ def _recolectar_demo(name, tag, on_progress, noche_inicio=NOCHE_INICIO, noche_fi
         DCJ = random.randint(1, 3)
         NPPD = round(random.uniform(1.5, 4.0), 2)
 
-    # Numero fijo de partidas recolectadas (igual que el modo real).
-    TP = 60
-    # ND se deriva de TP y NPPD para que las 6 variables sean coherentes
-    # entre si:  NPPD = TP / ND  =>  ND = TP / NPPD.
-    ND = max(1, round(TP / NPPD))
+    # Ventana de 14 dias: ND no puede superar PERIODO_DIAS.
+    # Se elige ND segun el perfil y se deriva TP = NPPD * ND.
+    ND = random.randint(max(3, PERIODO_DIAS // 3), PERIODO_DIAS)
+    TP = max(ND, int(round(NPPD * ND)))
     NPPD = round(TP / ND, 2)            # recalcula NPPD exacto sobre ese ND
     DCJ = min(DCJ, ND)                  # la racha no puede exceder los dias
     THT = round(HPD * ND, 2)

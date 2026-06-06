@@ -41,6 +41,12 @@ df = df.drop(columns=["Usuario", "Tag"], errors="ignore")
 # Nombres legibles de las clases binarias (0 -> "Sin riesgo", 1 -> "Riesgo")
 CLASES = ["Sin riesgo", "Riesgo"]
 
+# FEATURES DEL MODELO: solo los indicadores conductuales que aportan señal.
+# THT, TP y NPPD se siguen recolectando como variables extra (dashboard),
+# pero NO entran al modelo: XGBoost les asignaba 0% de importancia y quitarlas
+# no degrada el desempeño (incluso lo mejora levemente).
+FEATURES = ["ND", "HPD", "DCJ"]
+
 print("\n====================================================")
 print("DATASET REAL CARGADO (etiqueta binaria ICOGS-A)")
 print("====================================================")
@@ -61,7 +67,7 @@ for val in [0, 1]:
 encoder = LabelEncoder()
 encoder.classes_ = np.array(CLASES)   # índice 0 = "Sin riesgo", 1 = "Riesgo"
 
-X = df.drop(columns=["Riesgo"])
+X = df[FEATURES]                      # solo ND, HPD, DCJ
 y = df["Riesgo"].astype(int)          # ya es 0/1
 
 print("\n====================================================")

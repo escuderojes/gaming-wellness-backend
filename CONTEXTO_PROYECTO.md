@@ -2,7 +2,78 @@
 
 > Documento de continuidad. Resume qué se hizo, qué falta y qué sigue,
 > para retomar el trabajo en cualquier sesión nueva.
-> **Última actualización:** 22 de mayo de 2026 (sesión 2).
+> **Última actualización:** 1 de junio de 2026 (sesión de reformulación).
+
+---
+
+## 0. Cambios clave de la reformulación (LEER PRIMERO)
+
+Esta sección resume los cambios estructurales más recientes. El resto del
+documento conserva el historial; ante cualquier contradicción, **manda esta
+sección**.
+
+### Indicadores oficiales de la tesis (4)
+La variable dependiente se operacionaliza con **4 indicadores**, agrupados
+en 3 dimensiones / objetivos específicos:
+
+| Dimensión (OE) | Indicador | Fórmula |
+|---|---|---|
+| OE1 · Intensidad | **HPD** | THT / ND |
+| OE2 · Frecuencia | **NPPD** | TPP / ND |
+| OE2 · Frecuencia | **DCJ** | max(racha de días consecutivos) |
+| OE3 · Control | **ICOGS-A** | Σ ítems (12 ítems, rango 12–60) |
+
+- Se **eliminó** el indicador FBG (binge gaming) que se había propuesto.
+- El antiguo NPPD/PRTPJ y otros derivados quedaron fuera como indicadores.
+- `PJN` (juego nocturno) y `TTS` (tiempo total semana) son **métricas
+  complementarias** del dashboard, NO indicadores de la tesis.
+
+### Instrumento ICOGS → ICOGS-A
+- Pasó de **8 ítems (rango 8–40)** a **12 ítems (rango 12–60)**.
+- Ítems invertidos {2,3,4,5,6,8} se recodifican (6 − valor) antes de sumar.
+- Confiabilidad piloto (n=50): **α de Cronbach = 0.925** (12 ítems).
+- Datos en `D:\...\OE3\` (carpeta de la tesis): `icogs_a_dataset.csv`,
+  `icogs_a_spss.csv`.
+
+### Etiqueta de riesgo = EXTERNA (no heurística)
+- **Antes:** la etiqueta Alto/Medio/Bajo se derivaba de las mismas
+  variables de juego (circular).
+- **Ahora:** la etiqueta sale del **ICOGS-A por percentiles**. Corte:
+  **riesgo = puntaje ICOGS-A ≥ P75**. El collector **ya no calcula riesgo**:
+  solo extrae indicadores conductuales; la etiqueta se asigna aparte.
+
+### Modelo
+- **XGBoost binario** (clases del encoder: `["Sin riesgo", "Riesgo"]`).
+- `train_model.py` entrena **solo XGBoost** (sin comparar 3 modelos).
+- Métricas test (20%): Accuracy ≈ 0.87, Recall(Riesgo) ≈ 0.76, AUC ≈ 0.96.
+- `ND` sigue siendo el predictor dominante (~74.8%).
+- Dataset de entrenamiento: `data_collector/dataset_final.csv` =
+  features de pretest + etiqueta binaria del ICOGS-A.
+
+### Niveles visuales = 3 bandas derivadas del score
+El modelo es binario, pero la **presentación** usa 3 niveles deducibles del
+score 0–100 (= probabilidad de "Riesgo"):
+- **Bajo**: score < 50
+- **Medio**: 50 ≤ score < 75
+- **Alto**: score ≥ 75 (corresponde al P75 del ICOGS-A)
+
+`model_service.predecir()` devuelve `nivel` (Alto/Medio/Bajo, para mostrar),
+`clase` ("Riesgo"/"Sin riesgo"), `en_riesgo` (bool), `score` y
+`probabilidades`. La función `nivel_visual(score)` hace el mapeo.
+
+### Ventana de sueño / PJN (arreglado)
+- Antes la ventana configurable (sleepStart/sleepEnd) **no se usaba**: el
+  PJN se calculaba con franja fija 22:00–06:00.
+- Ahora `collect_routes` lee la config del usuario y la pasa a
+  `recolectar_usuario(..., config=cfg)`; `_es_noche(hora, ini, fin)` respeta
+  la ventana (incluso si cruza medianoche).
+
+### Dashboard (frontend)
+- Tarjetas principales de indicadores: **HPD, THT, DCJ, NPPD** (grilla 2×2).
+- Barra horizontal de métricas complementarias: **PJN, TTS, ND**.
+- Niveles Alto/Medio/Bajo en medidor, banner, historial y colores.
+- Distribución horaria del modo demo ahora **varía por usuario** (pico
+  desplazado + jitter), ya no es una silueta fija.
 
 ---
 
@@ -24,17 +95,18 @@ El proyecto tiene dos partes, en dos carpetas separadas:
 
 API Flask que se levanta con `python run.py` en el puerto **5000**.
 
-### Modelo de ML
-- Algoritmo: **XGBoost** (ya entrenado, F1 ≈ 0.98).
-- Clasifica en 3 clases: **Alto / Medio / Bajo**.
-- **6 variables de entrada, en este orden EXACTO** (leído del propio `.pkl`):
-  `THT, ND, TP, HPD, NPPD, DCJ`
+### Modelo de ML  (ver sección 0 para el detalle vigente)
+- Algoritmo: **XGBoost binario**. Clases del encoder: `["Sin riesgo","Riesgo"]`.
+- Etiqueta de entrenamiento: **externa**, del ICOGS-A (riesgo si ≥ P75).
+- **6 variables de entrada (features), orden EXACTO** del `.pkl`:
+  `THT, ND, TP, HPD, NPPD, DCJ`. (De estas, 4 son indicadores de la tesis;
+  el modelo usa las 6 como features, pero `ND` domina ~74.8%.)
 - Artefactos en la raíz de `D:\Backend`: `modelo_gaming.pkl`, `scaler.pkl`,
   `encoder.pkl`.
-- Script de entrenamiento: `training/train_model.py`.
-- Nota: la variable `ND` concentra el 77% de la importancia; `TP` y `NPPD`
-  aportan 0%. El modelo funciona, pero podría reentrenarse con solo 4
-  variables (`THT, ND, HPD, DCJ`) si se quiere mayor limpieza — opcional.
+- Script de entrenamiento: `training/train_model.py` (solo XGBoost).
+- Dataset: `data_collector/dataset_final.csv` (features pretest + etiqueta
+  binaria ICOGS-A).
+- Métricas test (20%): Accuracy ≈ 0.87, Recall(Riesgo) ≈ 0.76, AUC ≈ 0.96.
 
 ### Estructura de carpetas
 ```
@@ -57,8 +129,10 @@ DATOS DE ML/                figuras y CSV de resultados del modelo
 ```
 
 ### Endpoints listos y probados
-- **`POST /api/predict`** — recibe las 6 variables, devuelve `nivel`,
-  `nivel_label`, `score` (0-100) y `probabilidades`.
+- **`POST /api/predict`** — recibe las 6 variables, devuelve `nivel`
+  (Alto/Medio/Bajo derivado del score), `nivel_label`, `clase`
+  ("Riesgo"/"Sin riesgo"), `en_riesgo` (bool), `score` (0-100 = P(Riesgo))
+  y `probabilidades`.
 - **`POST /api/collect`** — inicia la recolección de un usuario en segundo
   plano; devuelve un `job_id` (código 202). Acepta un `uid` opcional
   (Firebase Auth): si se envía, la recolección se guarda en Firestore al
@@ -116,10 +190,11 @@ Aplicación Vite + React 19 (`npm run dev`). Dependencias: `react-router-dom`,
   hace polling de `GET /api/collect/<job_id>` y muestra el progreso y los
   pasos verdaderos. Maneja fases loading / done / error.
 - **`DashboardPage`** lee la última recolección real desde `GET /api/dashboard`:
-  el medidor de riesgo (score + nivel), las 4 tarjetas de indicadores
-  (HPD, THT, DCJ, PJN), el avatar/ícono de invocador y la tarjeta
-  `ModelBreakdown` (probabilidades del modelo + las 6 variables) muestran
-  datos reales. Tiene estados de carga y vacío. El layout se reorganizó
+  el medidor de riesgo (score + nivel Alto/Medio/Bajo), las 4 tarjetas de
+  indicadores (**HPD, THT, DCJ, NPPD** en grilla 2×2), la barra de métricas
+  complementarias (**PJN, TTS, ND**), el avatar/ícono de invocador y la
+  tarjeta `ModelBreakdown` (probabilidades del modelo + las 6 variables)
+  muestran datos reales. Tiene estados de carga y vacío. El layout se reorganizó
   en filas (22 may): perfil/indicadores/desglose · distribución horaria
   (ancha) + metas · promedio por día + comparativa · tips.
 - **Comparativa antes/después** (`Comparative`): compara el HPD de la
@@ -171,13 +246,17 @@ del frontend. El dashboard fue reorganizado en filas (22 may) y casi
 todas sus tarjetas usan datos reales.
 
 Lo que queda — todo opcional / de pulido:
-1. Secciones aún mock en `DashboardPage`: metas semanales (`WeeklyGoals`)
-   y tips preventivos (`PreventionTips`). La tarjeta de recordatorios
-   (Configuración / Recomendaciones) es solo UI.
+1. Secciones aún mock en `DashboardPage`: tips preventivos
+   (`PreventionTips`). La tarjeta de recordatorios (Configuración /
+   Recomendaciones) es solo UI (sin notificaciones reales).
 2. **Verificación del token de Firebase** en el backend: hoy el `uid`
    llega del cliente y se confía. Para producción, validar el ID token.
-3. Opcional: gráfica de TTS por semana; sistema real de notificaciones.
-4. Opcional: reentrenar el modelo con 4 variables (ver nota en sección 2).
+3. **Desplegar los cambios**: backend a Render (`git push` → redeploy
+   automático) y frontend a Firebase (`npm run build` + `firebase deploy`).
+   Los cambios de la reformulación están en disco local pero la app web
+   usa los servicios desplegados hasta que se publiquen.
+4. Tras desplegar, **generar una recolección nueva** para ver los datos
+   recalculados (el dashboard muestra la última recolección guardada).
 
 ### Firestore — ✅ HECHO (21 may 2026)
 - Firestore Database habilitado en la consola (proyecto `tesis-f4bdb`,

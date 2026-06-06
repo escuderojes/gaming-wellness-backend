@@ -9,7 +9,7 @@ Estructura por usuario (2 semanas: 13 may → 26 may):
   - 26 may 2026  → colecta POST (variables reales del CSV)
 
 Cada entrada tiene hora/minuto/segundo aleatorio realista (tarde-noche).
-TP fijo = 60 en todos los puntos. demo=False.
+TP (total de partidas) es el real de la ventana de 14 días. demo=False.
 
 Al finalizar la siembra, si hay RIOT_API_KEY configurada, se obtiene
 el perfil real de cada usuario (icono, nivel) desde la Riot API y se
@@ -154,15 +154,16 @@ def _interpolar(pre: dict, post: dict, t: float) -> dict:
     return resultado
 
 
-def _perfil_desde_riesgo(riesgo: str) -> str:
-    return {"Alto": "alto", "Medio": "medio"}.get(riesgo, "bajo")
+def _perfil_desde_riesgo(riesgo) -> str:
+    """Perfil de ícono demo según el riesgo binario del ICOGS-A.
+    Acepta 1/'1'/'Riesgo' como 'alto' y el resto como 'bajo'."""
+    r = str(riesgo).strip().lower()
+    return "alto" if r in ("1", "riesgo", "alto") else "bajo"
 
 
-def _fijar_tp(variables: dict) -> dict:
-    """Fuerza TP=60 solo para display. NPPD se mantiene del CSV (real)."""
-    v = dict(variables)
-    v["TP"] = 60
-    return v
+def _solo_interp(variables: dict) -> dict:
+    """Devuelve las variables interpoladas tal cual (TP ya es real)."""
+    return dict(variables)
 
 
 # ── Escritura en Firestore ────────────────────────────────────────────────────
@@ -352,17 +353,17 @@ def main():
             vars_pre_raw = {
                 "THT":  float(fila["THT_pre"]),
                 "ND":   int(fila["ND_pre"]),
-                "TP":   60,                          # display fijo
+                "TP":   int(fila["TP_pre"]),         # partidas reales (ventana 14 días)
                 "HPD":  float(fila["HPD_pre"]),
-                "NPPD": float(fila["NPPD_pre"]),     # real del CSV
+                "NPPD": float(fila["NPPD_pre"]),     # complementaria, real del CSV
                 "DCJ":  int(fila["DCJ_pre"]),
             }
             vars_post_raw = {
                 "THT":  float(fila["THT_post"]),
                 "ND":   int(fila["ND_post"]),
-                "TP":   60,                          # display fijo
+                "TP":   int(fila["TPP_post"]),       # partidas reales (ventana 14 días)
                 "HPD":  float(fila["HPD_post"]),
-                "NPPD": float(fila["NPPD_post"]),    # real del CSV
+                "NPPD": float(fila["NPPD_post"]),    # complementaria, real del CSV
                 "DCJ":  int(fila["DCJ_post"]),
             }
         except (KeyError, ValueError) as e:
@@ -370,12 +371,12 @@ def main():
             errores += 1
             continue
 
-        perfil_pre  = _perfil_desde_riesgo(fila.get("Riesgo_pre",  "Bajo"))
-        perfil_post = _perfil_desde_riesgo(fila.get("Riesgo_post", "Bajo"))
+        perfil_pre  = _perfil_desde_riesgo(fila.get("Riesgo_pre",  "0"))
+        perfil_post = _perfil_desde_riesgo(fila.get("Riesgo_post", "0"))
 
         puntos = [(FECHA_PRE, vars_pre_raw, perfil_pre)]
         for ref_date, t in INTERMEDIOS:
-            v_interp = _fijar_tp(_interpolar(vars_pre_raw, vars_post_raw, t))
+            v_interp = _solo_interp(_interpolar(vars_pre_raw, vars_post_raw, t))
             puntos.append((ref_date, v_interp, perfil_pre if t < 0.5 else perfil_post))
         puntos.append((FECHA_POST, vars_post_raw, perfil_post))
 
