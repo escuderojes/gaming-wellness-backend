@@ -375,3 +375,68 @@ def get_recomendaciones():
         "recomendaciones": recos,
         "cumplimiento": cum,
     })
+
+
+@dashboard_bp.route("/icogs", methods=["GET"])
+def get_icogs():
+    """Historial de tests ICOGS-A del usuario (mas reciente primero).
+    ---
+    tags:
+      - ICOGS
+    parameters:
+      - in: query
+        name: uid
+        required: true
+        type: string
+    responses:
+      200:
+        description: Lista de tests ICOGS-A
+    """
+    if not firestore_service.firestore_disponible():
+        return _sin_firestore()
+    uid = _uid_de_query()
+    if not uid:
+        return jsonify({"error": "Falta el uid."}), 400
+    tests = firestore_service.obtener_icogs(uid, limite=20)
+    return jsonify({
+        "uid": uid,
+        "umbral": firestore_service.ICOGS_UMBRAL,
+        "tests": tests,
+    })
+
+
+@dashboard_bp.route("/icogs", methods=["POST"])
+def post_icogs():
+    """Registra un test ICOGS-A respondido en la plataforma.
+
+    Espera JSON: { uid, respuestas: [12 enteros 1-5] }.
+    El backend calcula el puntaje (items invertidos 2,3,4,5,6 y 8
+    recodificados como 6 - v) y el nivel segun el umbral 36.
+    ---
+    tags:
+      - ICOGS
+    responses:
+      200:
+        description: Test guardado con puntaje y nivel calculados
+      400:
+        description: Respuestas invalidas o incompletas
+    """
+    if not firestore_service.firestore_disponible():
+        return _sin_firestore()
+    body = request.get_json(silent=True) or {}
+    uid = (body.get("uid") or "").strip()
+    respuestas = body.get("respuestas")
+    if not uid:
+        return jsonify({"error": "Falta el uid."}), 400
+    if not isinstance(respuestas, list) or len(respuestas) != 12:
+        return jsonify({"error": "Se requieren las 12 respuestas del cuestionario."}), 400
+    try:
+        valores = [int(v) for v in respuestas]
+    except (TypeError, ValueError):
+        return jsonify({"error": "Las respuestas deben ser numeros enteros."}), 400
+    if any(v < 1 or v > 5 for v in valores):
+        return jsonify({"error": "Cada respuesta debe estar entre 1 y 5."}), 400
+    registro = firestore_service.guardar_icogs(uid, valores, origen="plataforma")
+    if registro is None:
+        return _sin_firestore()
+    return jsonify({"guardado": True, "test": registro})

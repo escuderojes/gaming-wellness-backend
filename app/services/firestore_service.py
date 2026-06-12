@@ -237,6 +237,74 @@ def obtener_ultima_recoleccion(uid, riot_id=None):
 
 
 # --------------------------------------------------------------------
+# Tests ICOGS-A (cuestionario de control sobre el comportamiento de juego)
+# --------------------------------------------------------------------
+# usuarios/{uid}/icogs/{autoId} -> un test respondido
+#   { fecha, respuestas: [12 valores 1-5 crudos], puntaje, nivel, origen }
+# El puntaje recodifica los items invertidos {2,3,4,5,6,8} como (6 - v).
+# Umbral del instrumento: >= 36 -> nivel "Alto" (control deteriorado).
+
+ICOGS_ITEMS_INVERTIDOS = {2, 3, 4, 5, 6, 8}   # numeracion 1-12
+ICOGS_UMBRAL = 36
+
+
+def calcular_icogs(respuestas):
+    """Puntaje total ICOGS-A (12-60) a partir de las 12 respuestas crudas."""
+    total = 0
+    for i, v in enumerate(respuestas, start=1):
+        v = int(v)
+        total += (6 - v) if i in ICOGS_ITEMS_INVERTIDOS else v
+    return total
+
+
+def guardar_icogs(uid, respuestas, origen="plataforma", fecha=None, puntaje=None):
+    """Guarda un test ICOGS-A en usuarios/{uid}/icogs y devuelve el registro."""
+    db = get_db()
+    if db is None:
+        return None
+    respuestas = [int(v) for v in respuestas]
+    if puntaje is None:
+        puntaje = calcular_icogs(respuestas)
+    doc = {
+        "fecha": fecha or datetime.now(timezone.utc),
+        "respuestas": respuestas,
+        "puntaje": int(puntaje),
+        "nivel": "Alto" if int(puntaje) >= ICOGS_UMBRAL else "Bajo",
+        "umbral": ICOGS_UMBRAL,
+        "origen": origen,
+    }
+    ref = db.collection("usuarios").document(uid).collection("icogs").document()
+    ref.set(doc)
+    doc["id"] = ref.id
+    if hasattr(doc["fecha"], "isoformat"):
+        doc["fecha"] = doc["fecha"].isoformat()
+    return doc
+
+
+def obtener_icogs(uid, limite=10):
+    """Devuelve los ultimos tests ICOGS-A del usuario (mas reciente primero)."""
+    db = get_db()
+    if db is None:
+        return []
+    from firebase_admin import firestore as _fs
+    query = (
+        db.collection("usuarios").document(uid)
+        .collection("icogs")
+        .order_by("fecha", direction=_fs.Query.DESCENDING)
+        .limit(limite)
+    )
+    resultado = []
+    for snap in query.stream():
+        item = snap.to_dict()
+        item["id"] = snap.id
+        fecha = item.get("fecha")
+        if hasattr(fecha, "isoformat"):
+            item["fecha"] = fecha.isoformat()
+        resultado.append(item)
+    return resultado
+
+
+# --------------------------------------------------------------------
 # Vinculación de cuenta de LoL
 # --------------------------------------------------------------------
 
