@@ -259,6 +259,10 @@ def _extras(durations, dates, noche_inicio=NOCHE_INICIO, noche_fin=NOCHE_FIN):
     # DCJ de la semana: racha máxima de días consecutivos dentro del rango filtrado.
     dcj_semana = calcular_dcj([f for _, f in semana]) if semana else 0
 
+    # Fechas con actividad en TODO el periodo de observacion (14 dias),
+    # para el calendario del modulo de rachas (Prevencion).
+    dias_jugados = sorted({fecha.date().isoformat() for fecha in dates})
+
     return {
         # PJN: minutos de juego nocturno promedio por dia activo en la semana.
         "pjnMin": round(noche_horas * 60 / nd, 1),
@@ -274,10 +278,37 @@ def _extras(durations, dates, noche_inicio=NOCHE_INICIO, noche_fin=NOCHE_FIN):
         "hpdSemana": hpd_semana,                         # h/día activo esta semana
         "ttsSemana": round(total_horas_semana, 2),        # horas reales acumuladas esta semana
         "dcjSemana": dcj_semana,                          # racha máx. de días consecutivos esta semana
+        # Fechas ISO con al menos una partida en la ventana de 14 dias.
+        "diasJugados": dias_jugados,
     }
 
 
-def _extras_demo(perfil_juego, THT, ND, noche_inicio=NOCHE_INICIO, noche_fin=NOCHE_FIN):
+def _dias_jugados_demo(ND, DCJ, hasta):
+    """Genera ND fechas (ISO) dentro de la ventana de 14 dias cuya racha
+    maxima de dias consecutivos sea exactamente DCJ. Mantiene coherencia
+    entre el calendario del modulo de rachas y los indicadores del modelo."""
+    nd = max(1, min(int(ND), PERIODO_DIAS))
+    dcj = max(1, min(int(DCJ), nd))
+
+    # Patron determinista: bloques de `dcj` dias seguidos separados por un
+    # dia de descanso, contados DESDE HOY hacia atras. La racha maxima del
+    # prefijo siempre es exactamente `dcj` y nunca se rompe la coherencia.
+    offsets = []          # 0 = hoy, 1 = ayer, ...
+    off = 0
+    while len(offsets) < nd and off < PERIODO_DIAS:
+        bloque = min(dcj, nd - len(offsets))
+        for i in range(bloque):
+            if off + i < PERIODO_DIAS:
+                offsets.append(off + i)
+        off += dcj + 1    # un dia de descanso entre bloques
+
+    return sorted(
+        (hasta - timedelta(days=off)).isoformat()
+        for off in offsets
+    )
+
+
+def _extras_demo(perfil_juego, THT, ND, noche_inicio=NOCHE_INICIO, noche_fin=NOCHE_FIN, DCJ=None):
     """Simula las metricas extra de forma plausible segun el perfil.
 
     porHora y porDiaSemana usan tts_semana como base comun para que
@@ -335,6 +366,8 @@ def _extras_demo(perfil_juego, THT, ND, noche_inicio=NOCHE_INICIO, noche_fin=NOC
         "hpdSemana": hpd_semana,
         "ttsSemana": tts_semana,
         "dcjSemana": dcj_semana,
+        # Fechas ISO simuladas coherentes con ND y DCJ (calendario de rachas).
+        "diasJugados": _dias_jugados_demo(ND, DCJ if DCJ is not None else dcj_semana, hasta),
     }
 
 
@@ -378,7 +411,7 @@ def _recolectar_demo(name, tag, on_progress, noche_inicio=NOCHE_INICIO, noche_fi
     return {
         "variables": variables,
         "perfil": perfil,
-        "extras": _extras_demo(perfil_juego, THT, ND, noche_inicio, noche_fin),
+        "extras": _extras_demo(perfil_juego, THT, ND, noche_inicio, noche_fin, DCJ=DCJ),
     }
 
 
