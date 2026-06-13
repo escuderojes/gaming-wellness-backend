@@ -258,10 +258,21 @@ def calcular_icogs(respuestas):
 
 
 def guardar_icogs(uid, respuestas, origen="plataforma", fecha=None, puntaje=None):
-    """Guarda un test ICOGS-A en usuarios/{uid}/icogs y devuelve el registro."""
+    """Guarda un test ICOGS-A en usuarios/{uid}/icogs y devuelve el registro.
+
+    Regla de la plataforma: el historial mantiene como maximo el par
+    antes/despues. Si el usuario ya tiene 2 o mas tests y responde de
+    nuevo, el test mas reciente se SOBRESCRIBE (el penultimo queda como
+    ancla del "antes"); con 0 o 1 tests, simplemente se agrega.
+    """
     db = get_db()
     if db is None:
         return None
+    if origen == "plataforma":
+        previos = obtener_icogs(uid, limite=2)
+        if len(previos) >= 2 and previos[0].get("id"):
+            (db.collection("usuarios").document(uid)
+               .collection("icogs").document(previos[0]["id"]).delete())
     respuestas = [int(v) for v in respuestas]
     if puntaje is None:
         puntaje = calcular_icogs(respuestas)
