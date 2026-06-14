@@ -226,54 +226,22 @@ def generar_prediccion_futura(variables, extras, config, historial, prediccion_a
             "alertas": [],
         }
 
-    # ── Calcular tendencia lineal ─────────────────────────────────────
-    recs   = historial or []
-    n_recs = len(recs)
-
-    historial_suficiente = n_recs >= 2
-
-    if historial_suficiente:
-        score_nuevo = _score_prediccion(
-            recs[0].get("prediccion"), recs[0].get("variables")
-        )
-        score_viejo = _score_prediccion(
-            recs[-1].get("prediccion"), recs[-1].get("variables")
-        )
-        if score_nuevo is None:
-            score_nuevo = score_actual
-        if score_viejo is None:
-            score_viejo = score_actual
-        n_intervals = max(n_recs - 1, 1)
-        tasa = (score_nuevo - score_viejo) / n_intervals  # delta de score por período ~14d
-    else:
-        tasa = 0.0
-
-    if not historial_suficiente:
-        tendencia_tipo = "insuficiente"
-        tendencia_det = (
-            "Se necesita al menos 2 recolecciones para calcular una tendencia real."
-        )
-    elif tasa < -5:
-        tendencia_tipo = "mejorando"
-        tendencia_det  = (
-            f"Tu riesgo bajó {abs(tasa):.1f} puntos por medición "
-            f"en las últimas {n_recs} recolecciones."
-        )
-    elif tasa > 5:
-        tendencia_tipo = "empeorando"
-        tendencia_det  = (
-            f"Tu riesgo subió {tasa:.1f} puntos por medición "
-            f"en las últimas {n_recs} recolecciones."
-        )
-    else:
-        tendencia_tipo = "estable"
-        tendencia_det  = "Tu riesgo se ha mantenido estable entre las últimas mediciones."
+    # ── Proyección basada solo en la recolección más reciente ──────────
+    # No se usa el historial para calcular una tendencia: cada predicción
+    # se basa únicamente en las variables (ND/HPD/DCJ) de la última
+    # recolección, evitando comparar mediciones de origenes distintos
+    # (p. ej. datos sembrados vs. una recolección real posterior).
+    tasa = 0.0
+    tendencia_tipo = "actual"
+    tendencia_det = (
+        "La proyección se basa únicamente en tu recolección más reciente."
+    )
 
     tendencia = {
         "tipo":    tendencia_tipo,
-        "tasa":    round(tasa, 2),
+        "tasa":    0.0,
         "detalle": tendencia_det,
-        "historial_suficiente": historial_suficiente,
+        "historial_suficiente": True,
     }
 
     tendencia_mensajes = (
