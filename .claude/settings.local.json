@@ -9,7 +9,15 @@
       "Bash(cd /d D:\\\\Backend)",
       "Bash(python -c \"import py_compile; py_compile.compile\\('app/services/recomendaciones.py', doraise=True\\); py_compile.compile\\('app/services/collector_service.py', doraise=True\\); py_compile.compile\\('app/routes/dashboard_routes.py', doraise=True\\); print\\('OK — sin errores de sintaxis'\\)\")",
       "Bash(netstat -ano)",
-      "Bash(findstr \":5000\")"
+      "Bash(findstr \":5000\")",
+      "Bash(ls D:/ 2>/dev/null | head -20)",
+      "Bash(curl -s http://localhost:5000/apidocs/)",
+      "PowerShell(Start-Process -FilePath \"D:\\\\Backend\\\\venv\\\\Scripts\\\\python.exe\" -ArgumentList \"D:\\\\Backend\\\\run.py\" -WorkingDirectory \"D:\\\\Backend\" -WindowStyle Hidden)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5000/apidocs/)",
+      "PowerShell($env:PYTHONIOENCODING=\"utf-8\"; cd D:\\\\Backend; .\\\\venv\\\\Scripts\\\\python.exe run_tests.py)",
+      "Bash(curl -s http://localhost:5000/api/dashboard?uid=test123)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d, indent=2\\)\\)\")",
+      "Bash(./venv/Scripts/python.exe -c ' *)"
     ]
   }
 }
