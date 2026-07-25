@@ -36,7 +36,7 @@ import pandas as pd
 # CONFIG
 # ==========================================
 
-API_KEY    = "RGAPI-88715abd-2096-4e9e-af62-04ebee11e037"   
+API_KEY    = "RGAPI-94f2cd83-6c69-4ec6-9f89-80f0520da515"   
 REGION     = "americas"
 headers    = {"X-Riot-Token": API_KEY}
 
